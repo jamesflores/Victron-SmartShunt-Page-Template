@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🔋 SmartShunt Status</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background-color: #0d47a1;
+      color: white;
+      max-width: 500px;
+      margin: 2rem auto;
+      padding: 1rem;
+      border-radius: 1rem;
+    }
+    h1 {
+      font-size: 1.2rem;
+      text-align: center;
+    }
+    .circle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      border: 10px solid rgba(255,255,255,0.2);
+      width: 150px;
+      height: 150px;
+      margin: 2rem auto;
+      font-size: 2.5rem;
+      font-weight: bold;
+      background: radial-gradient(circle at center, #2196f3, #1565c0);
+    }
+    .output {
+      background-color: rgba(255,255,255,0.1);
+      padding: 1rem;
+      border-radius: 0.5rem;
+    }
+    .field {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.3rem 0;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    .field:last-child {
+      border-bottom: none;
+    }
+    .label {
+      color: #cfd8dc;
+    }
+    .timestamp {
+      margin-top: 1rem;
+      font-size: 0.8rem;
+      text-align: center;
+      color: #b0bec5;
+    }
+  </style>
+</head>
+<body>
+  <h1 id="title">🔌 SmartShunt Status</h1>
+  <div class="circle" id="soc">--%</div>
+  <div class="output" id="output">
+    <p>Loading...</p>
+  </div>
+  <div class="timestamp" id="timestamp"></div>
+
+  <script>
+    function humanTime(minutes) {
+      const h = Math.floor(minutes / 60);
+      const m = Math.floor(minutes % 60);
+      const d = Math.floor(h / 24);
+      const hr = h % 24;
+
+      let parts = [];
+      if (d > 0) parts.push(`${d}d`);
+      if (hr > 0) parts.push(`${hr}h`);
+      if (m > 0 || parts.length === 0) parts.push(`${m}m`);
+      return parts.join(" ");
+    }
+
+    function timeAgo(date) {
+      const now = new Date();
+      const diff = Math.floor((now - date) / 1000); // in seconds
+
+      if (diff < 60) return `Updated just now`;
+      if (diff < 3600) {
+        const mins = Math.floor(diff / 60);
+        return `Updated ${mins} minute${mins !== 1 ? 's' : ''} ago`;
+      }
+      if (diff < 86400) return `Updated ${Math.floor(diff / 3600)} hours ago`;
+
+      return `Updated on ${date.toLocaleDateString()} at ${date.toLocaleTimeString()}`;
+    }
+
+    async function loadData() {
+      const params = new URLSearchParams(window.location.search);
+      const serial = params.get("serial");
+      if (!serial) {
+        document.getElementById("output").innerHTML = "<p>❌ Missing <code>?serial=</code> parameter.</p>";
+        return;
+      }
+
+      try {
+        const res = await fetch(`https://replace-me.with-your.workers.dev/?key=${serial}`);
+        if (!res.ok) throw new Error("Not found");
+        const data = await res.json();
+
+        document.getElementById("title").textContent = `${data.name}`;
+        document.getElementById("soc").textContent = `${data.payload.soc}%`;
+
+        const soc = data.payload.soc;
+        let timeRemainingHtml = "";
+        let timeDot = "🟩";
+        if (soc < 20) {
+          timeDot = "🟥";
+        } else if (soc < 50) {
+          timeDot = "🟧";
+        } else if (soc < 80) {
+          timeDot = "🟨";
+        }
+
+        if (data.payload.remaining_mins != null && data.payload.current < 0) {
+          const human = humanTime(data.payload.remaining_mins);
+          timeRemainingHtml = `<div class="field"><span class="label">Time Remaining</span><span>${timeDot} ${human}</span></div>`;
+        } else {
+          timeRemainingHtml = `<div class="field"><span class="label">Status</span><span>⚡ Charging</span></div>`;
+        }
+
+        document.getElementById("output").innerHTML = `
+          <div class="field"><span class="label">Voltage</span><span>${data.payload.voltage} V</span></div>
+          <div class="field"><span class="label">Current</span><span>${data.payload.current} A</span></div>
+          <div class="field"><span class="label">Power</span><span>${(data.payload.voltage * data.payload.current).toFixed(0)} W</span></div>
+          <div class="field"><span class="label">Consumed Ah</span><span>${data.payload.consumed_ah} Ah</span></div>
+          ${timeRemainingHtml}
+        `;
+
+        const ts = new Date(data.timestamp.replace(/\.[0-9]+/, '') + 'Z');
+        document.getElementById("timestamp").textContent = timeAgo(ts);
+
+      } catch (err) {
+        document.getElementById("output").innerHTML = `<p>❌ Failed to load data for serial <code>${serial}</code></p>`;
+      }
+    }
+
+    loadData();
+  </script>
+</body>
+</html>
